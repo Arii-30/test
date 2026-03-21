@@ -1,0 +1,1075 @@
+
+DROP DATABASE IF EXISTS final_project;
+CREATE DATABASE final_project
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+USE final_project;
+
+
+
+CREATE TABLE employees (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    first_name      VARCHAR(50)     NOT NULL,
+    last_name       VARCHAR(50)     NOT NULL,
+    email           VARCHAR(100)    UNIQUE,
+    phone           VARCHAR(20),
+    address         TEXT,
+    city            VARCHAR(100),
+    date_of_birth   DATE,
+    gender          ENUM('male', 'female', 'other'),
+
+    department      ENUM(
+                        'management', 'sales', 'warehouse',
+                        'accounting', 'delivery', 'hr'
+                    ) DEFAULT 'sales',
+    hire_date       DATE            NOT NULL,
+    is_representative BOOLEAN       DEFAULT FALSE,
+    commission_rate DECIMAL(5,2)    DEFAULT 0.00,
+
+    status          ENUM('active', 'inactive', 'terminated')
+                                    DEFAULT 'active',
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_emp_status (status),
+    INDEX idx_emp_dept   (department),
+    INDEX idx_emp_rep    (is_representative)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE users (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    username        VARCHAR(50)     UNIQUE NOT NULL,
+    email           VARCHAR(100)    UNIQUE NOT NULL,
+    password_hash   VARCHAR(255)    NOT NULL,
+    role            ENUM('admin', 'accountant', 'representative')
+                                    NOT NULL DEFAULT 'representative',
+    is_active       BOOLEAN         DEFAULT TRUE,
+    last_login      DATETIME        NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_user_role   (role),
+    INDEX idx_user_active (is_active)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE salaries (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    employee_id     INT             NOT NULL,
+    base_salary     DECIMAL(12,2)   NOT NULL,
+    bonus           DECIMAL(12,2)   DEFAULT 0.00,
+    net_salary      DECIMAL(12,2)   NOT NULL,
+
+    pay_month       TINYINT         NOT NULL,
+    pay_year        SMALLINT        NOT NULL,
+    payment_date    DATE            NULL,
+    approved_by     INT             NULL,
+    notes           TEXT            NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_salary_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_salary_approver
+        FOREIGN KEY (approved_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    UNIQUE KEY uq_salary_period (employee_id, pay_month, pay_year),
+    INDEX idx_salary_date (payment_date)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE customers (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    first_name      VARCHAR(50)     NOT NULL,
+    last_name       VARCHAR(50)     NULL,
+    business_name   VARCHAR(150)    NULL,
+    email           VARCHAR(100)    NULL,
+    phone           VARCHAR(20)     NOT NULL,
+    address         TEXT,
+    city            VARCHAR(100),
+    credit_limit    DECIMAL(14,2)   DEFAULT 0.00,
+    current_balance DECIMAL(14,2)   DEFAULT 0.00,
+    status          ENUM('active', 'inactive', 'blacklisted')
+                                    DEFAULT 'active',
+    notes           TEXT            NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_cust_status (status),
+    INDEX idx_cust_city   (city)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE categories (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    name            VARCHAR(100)    NOT NULL,
+    description     TEXT            NULL,
+    is_active       BOOLEAN         DEFAULT TRUE,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_cat_active (is_active)
+) ENGINE=InnoDB;
+ALTER TABLE purchases ADD COLUMN received_at DATETIME NULL AFTER notes;
+
+CREATE TABLE products (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    name            VARCHAR(200)    NOT NULL,
+    barcode         VARCHAR(50)     UNIQUE NULL,
+    category_id     INT             NULL,
+    brand           VARCHAR(100)    NULL,
+    description     TEXT            NULL,
+    image_path      VARCHAR(500)    NULL,
+
+    cost_price      DECIMAL(12,2)   NOT NULL,
+    selling_price   DECIMAL(12,2)   NOT NULL,
+    wholesale_price DECIMAL(12,2)   NULL,
+
+    unit_of_measure ENUM(
+                        'piece', 'box', 'carton',
+                        'kg', 'gram', 'liter', 'pack'
+                    ) DEFAULT 'piece',
+    units_per_case  INT             DEFAULT 1,
+    weight_kg       DECIMAL(8,3)    NULL,
+    expiry_date     DATE            NULL,
+
+    min_stock_level INT             DEFAULT 10,
+    max_stock_level INT             DEFAULT 5000,
+    reorder_level   INT             DEFAULT 20,
+
+    is_active       BOOLEAN         DEFAULT TRUE,
+    is_featured     BOOLEAN         DEFAULT FALSE,
+
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_product_category
+        FOREIGN KEY (category_id) REFERENCES categories(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_prod_cat    (category_id),
+    INDEX idx_prod_brand  (brand),
+    INDEX idx_prod_active (is_active),
+    INDEX idx_prod_expiry (expiry_date)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE purchases (
+    id                  INT             PRIMARY KEY AUTO_INCREMENT,
+    purchase_number     VARCHAR(30)     UNIQUE NOT NULL,
+    supplier_name       VARCHAR(200)    NOT NULL,
+    supplier_phone      VARCHAR(20)     NULL,
+    purchase_date       DATE            NOT NULL,
+
+    subtotal            DECIMAL(14,2)   NOT NULL DEFAULT 0.00,
+    discount_amount     DECIMAL(12,2)   DEFAULT 0.00,
+    total_amount        DECIMAL(14,2)   NOT NULL DEFAULT 0.00,
+    paid_amount         DECIMAL(14,2)   DEFAULT 0.00,
+    due_amount          DECIMAL(14,2)   GENERATED ALWAYS AS
+                            (total_amount - paid_amount) STORED,
+
+    payment_status      ENUM('unpaid', 'partial', 'paid')
+                                        DEFAULT 'unpaid',
+    notes               TEXT            NULL,
+    created_by          INT             NULL,
+    created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_pur_creator
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_pur_supplier (supplier_name),
+    INDEX idx_pur_date     (purchase_date),
+    INDEX idx_pur_pay      (payment_status)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE purchase_items (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    purchase_id     INT             NOT NULL,
+    product_id      INT             NOT NULL,
+    quantity        INT             NOT NULL,
+    unit_cost       DECIMAL(12,2)   NOT NULL,
+    total_cost      DECIMAL(14,2)   GENERATED ALWAYS AS
+                        (quantity * unit_cost) STORED,
+    expiry_date     DATE            NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_pi_purchase
+        FOREIGN KEY (purchase_id) REFERENCES purchases(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_pi_product
+        FOREIGN KEY (product_id) REFERENCES products(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    INDEX idx_pi_purchase (purchase_id),
+    INDEX idx_pi_product  (product_id),
+    INDEX idx_pi_expiry   (expiry_date)
+) ENGINE=InnoDB;
+
+
+CREATE TABLE inventory (
+    id                  INT             PRIMARY KEY AUTO_INCREMENT,
+    product_id          INT             NOT NULL UNIQUE,
+    quantity_in_stock   INT             NOT NULL DEFAULT 0,
+    quantity_reserved   INT             DEFAULT 0,
+    quantity_available  INT             GENERATED ALWAYS AS
+                            (quantity_in_stock - quantity_reserved) STORED,
+    warehouse_location  VARCHAR(100)    NULL,
+    last_restock_date   DATE            NULL,
+    last_sold_date      DATE            NULL,
+    created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_inv_product
+        FOREIGN KEY (product_id) REFERENCES products(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+
+    INDEX idx_inv_stock    (quantity_in_stock),
+    INDEX idx_inv_location (warehouse_location)
+) ENGINE=InnoDB;
+
+
+CREATE TABLE inventory_transactions (
+    id                  INT             PRIMARY KEY AUTO_INCREMENT,
+    product_id          INT             NOT NULL,
+    transaction_type    ENUM(
+                            'purchase', 'sale', 
+                            'damage') NOT NULL,
+    quantity            INT             NOT NULL,
+    notes               TEXT            NULL,
+    created_by          INT             NULL,
+    created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_it_product
+        FOREIGN KEY (product_id) REFERENCES products(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_it_creator
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_it_product (product_id),
+    INDEX idx_it_type    (transaction_type),
+    INDEX idx_it_date    (created_at)
+) ENGINE=InnoDB;
+select * from inventory_transactions;
+select * from inventory;
+ALTER TABLE inventory_transactions
+MODIFY transaction_type VARCHAR(50) NOT NULL;
+
+
+
+CREATE TABLE sales (
+    id                  INT             PRIMARY KEY AUTO_INCREMENT,
+    sale_number         VARCHAR(30)     UNIQUE NOT NULL,
+    invoice_number      VARCHAR(30)     UNIQUE NULL,
+    customer_id         INT             NULL,
+    representative_id   INT             NULL,
+
+    sale_date           DATE            NOT NULL,
+
+    subtotal            DECIMAL(14,2)   NOT NULL DEFAULT 0.00,
+    discount_percent    DECIMAL(5,2)    DEFAULT 0.00,
+    discount_amount     DECIMAL(12,2)   DEFAULT 0.00,
+    total_amount        DECIMAL(14,2)   NOT NULL DEFAULT 0.00,
+    paid_amount         DECIMAL(14,2)   DEFAULT 0.00,
+    due_amount          DECIMAL(14,2)   GENERATED ALWAYS AS
+                            (total_amount - paid_amount) STORED,
+
+    payment_status      ENUM('unpaid', 'partial', 'paid')
+                                        DEFAULT 'unpaid',
+    order_status        ENUM(
+                            'draft', 'pending', 'confirmed', 'processing',
+                            'packed', 'shipped', 'delivered',
+                            'cancelled', 'returned'
+                        ) DEFAULT 'draft',
+    order_type          ENUM('direct', 'representative', 'online', 'phone')
+                                        DEFAULT 'direct',
+    sale_type           ENUM('cash', 'credit') DEFAULT 'cash',
+
+    -- APPROVAL WORKFLOW
+    approval_status     ENUM('pending', 'approved', 'rejected')
+                                        DEFAULT 'approved',
+    approved_by         INT             NULL,
+    approved_at         DATETIME        NULL,
+    rejection_reason    TEXT            NULL,
+
+    notes               TEXT            NULL,
+    created_by          INT             NULL,
+    created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_sale_customer
+        FOREIGN KEY (customer_id) REFERENCES customers(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_sale_rep
+        FOREIGN KEY (representative_id) REFERENCES employees(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_sale_approver
+        FOREIGN KEY (approved_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_sale_creator
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_sale_cust     (customer_id),
+    INDEX idx_sale_rep      (representative_id),
+    INDEX idx_sale_date     (sale_date),
+    INDEX idx_sale_status   (order_status),
+    INDEX idx_sale_pay      (payment_status),
+    INDEX idx_sale_type     (order_type),
+    INDEX idx_sale_approval (approval_status)
+) ENGINE=InnoDB;
+
+
+CREATE TABLE sale_items (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    sale_id         INT             NOT NULL,
+    product_id      INT             NOT NULL,
+    quantity        INT             NOT NULL,
+    unit_price      DECIMAL(12,2)   NOT NULL,
+    discount_amount DECIMAL(12,2)   DEFAULT 0.00,
+    total_price     DECIMAL(14,2)   GENERATED ALWAYS AS
+                        ((quantity * unit_price) - discount_amount) STORED,
+    notes           VARCHAR(255)    NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_si_sale
+        FOREIGN KEY (sale_id) REFERENCES sales(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_si_product
+        FOREIGN KEY (product_id) REFERENCES products(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+
+    INDEX idx_si_sale    (sale_id),
+    INDEX idx_si_product (product_id)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE notifications (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    recipient_id    INT             NOT NULL,
+    sender_id       INT             NULL,
+    title           VARCHAR(200)    NOT NULL,
+    message         TEXT            NOT NULL,
+    type            ENUM(
+                        'order_approval',
+                        'order_approved',
+                        'order_rejected',
+                        'low_stock',
+                        'payment_received',
+                        'debt_overdue',
+                        'expiry_alert',
+                        'general'
+                    ) NOT NULL DEFAULT 'general',
+    reference_table VARCHAR(50)     NULL,
+    reference_id    INT             NULL,
+    is_read         BOOLEAN         DEFAULT FALSE,
+    read_at         DATETIME        NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_notif_recipient
+        FOREIGN KEY (recipient_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_notif_sender
+        FOREIGN KEY (sender_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_notif_recipient (recipient_id),
+    INDEX idx_notif_read      (recipient_id, is_read),
+    INDEX idx_notif_type      (type),
+    INDEX idx_notif_ref       (reference_table, reference_id),
+    INDEX idx_notif_date      (created_at)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE debts (
+    id                  INT             PRIMARY KEY AUTO_INCREMENT,
+    debt_number         VARCHAR(30)     UNIQUE NOT NULL,
+
+    original_amount     DECIMAL(14,2)   NOT NULL,
+    paid_amount         DECIMAL(14,2)   DEFAULT 0.00,
+    remaining_amount    DECIMAL(14,2)   GENERATED ALWAYS AS
+                            (original_amount - paid_amount) STORED,
+    currency            VARCHAR(5)      DEFAULT 'USD',
+    due_date            DATE            NULL,
+    last_payment_date   DATE            NULL,
+
+    status              ENUM(
+                            'active', 'partially_paid', 'paid',
+                            'overdue', 'written_off', 'disputed'
+                        ) DEFAULT 'active',
+    notes               TEXT            NULL,
+    created_by          INT             NULL,
+    created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_debt_creator
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_debt_status (status),
+    INDEX idx_debt_due    (due_date)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE payments (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    payment_number  VARCHAR(30)     UNIQUE NOT NULL,
+    debt_id         INT             NULL,
+    amount          DECIMAL(14,2)   NOT NULL,
+    currency        VARCHAR(5)      DEFAULT 'USD',
+    payment_date    DATE            NOT NULL,
+    notes           TEXT            NULL,
+    received_by     INT             NULL,
+    created_by      INT             NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_pay_debt
+        FOREIGN KEY (debt_id) REFERENCES debts(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_pay_receiver
+        FOREIGN KEY (received_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_pay_creator
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_pay_debt (debt_id),
+    INDEX idx_pay_date (payment_date)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE expenses (
+    id              INT             PRIMARY KEY AUTO_INCREMENT,
+    expense_number  VARCHAR(30)     UNIQUE NOT NULL,
+    title           VARCHAR(200)    NOT NULL,
+    description     TEXT            NULL,
+    amount          DECIMAL(14,2)   NOT NULL,
+    currency        VARCHAR(5)      DEFAULT 'USD',
+    expense_date    DATE            NOT NULL,
+    approved_by     INT             NULL,
+    approved_at     DATETIME        NULL,
+    notes           TEXT            NULL,
+    created_by      INT             NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_exp_approver
+        FOREIGN KEY (approved_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_exp_creator
+        FOREIGN KEY (created_by) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_exp_date (expense_date)
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE audit_logs (
+    id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         INT             NULL,
+    user_name       VARCHAR(50)     NULL,
+    action          ENUM(
+                        'CREATE', 'READ', 'UPDATE', 'DELETE',
+                        'LOGIN', 'LOGOUT', 'LOGIN_FAILED',
+                        'APPROVE', 'REJECT', 'EXPORT',
+                        'PASSWORD_CHANGE', 'STATUS_CHANGE'
+                    ) NOT NULL,
+    table_name      VARCHAR(100)    NOT NULL,
+    record_id       INT             NULL,
+    old_values      JSON            NULL,
+    new_values      JSON            NULL,
+    changed_fields  JSON            NULL,
+    description     TEXT            NULL,
+    created_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_audit_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+
+    INDEX idx_audit_user   (user_id),
+    INDEX idx_audit_action (action),
+    INDEX idx_audit_table  (table_name),
+    INDEX idx_audit_record (table_name, record_id),
+    INDEX idx_audit_date   (created_at)
+) ENGINE=InnoDB;
+
+
+
+-- VIEWS
+
+
+-- Low stock
+CREATE OR REPLACE VIEW vw_low_stock AS
+SELECT
+    p.id              AS product_id,
+    p.name            AS product_name,
+    p.barcode,
+    c.name            AS category,
+    i.quantity_in_stock,
+    i.quantity_reserved,
+    i.quantity_available,
+    p.min_stock_level,
+    p.reorder_level,
+    p.expiry_date,
+    i.warehouse_location
+FROM inventory i
+JOIN products p ON p.id = i.product_id
+LEFT JOIN categories c ON c.id = p.category_id
+WHERE i.quantity_available <= p.reorder_level
+  AND p.is_active = TRUE
+ORDER BY i.quantity_available ASC;
+
+
+-- Expiring products (30 days)
+CREATE OR REPLACE VIEW vw_expiring_products AS
+SELECT
+    p.id              AS product_id,
+    p.name            AS product_name,
+    c.name            AS category,
+    p.expiry_date,
+    DATEDIFF(p.expiry_date, CURDATE()) AS days_until_expiry,
+    i.quantity_in_stock,
+    i.warehouse_location
+FROM products p
+JOIN inventory i ON i.product_id = p.id
+LEFT JOIN categories c ON c.id = p.category_id
+WHERE p.expiry_date IS NOT NULL
+  AND p.expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+  AND p.is_active = TRUE
+ORDER BY p.expiry_date ASC;
+
+
+-- All outstanding debts
+CREATE OR REPLACE VIEW vw_outstanding_debts AS
+SELECT
+    d.id              AS debt_id,
+    d.debt_number,
+    d.original_amount,
+    d.paid_amount,
+    d.remaining_amount,
+    d.due_date,
+    DATEDIFF(CURDATE(), d.due_date) AS days_overdue,
+    d.last_payment_date,
+    d.status,
+    d.notes
+FROM debts d
+WHERE d.status IN ('active', 'partially_paid', 'overdue')
+ORDER BY d.due_date ASC;
+
+
+-- Rep sales summary
+CREATE OR REPLACE VIEW vw_rep_sales_summary AS
+SELECT
+    e.id              AS representative_id,
+    CONCAT(e.first_name, ' ', e.last_name) AS representative_name,
+    COUNT(s.id)       AS total_orders,
+    SUM(s.total_amount) AS total_sales,
+    SUM(s.paid_amount)  AS total_collected,
+    SUM(s.due_amount)   AS total_outstanding,
+    COUNT(CASE WHEN s.order_status    = 'delivered' THEN 1 END) AS delivered_orders,
+    COUNT(CASE WHEN s.order_status    = 'cancelled' THEN 1 END) AS cancelled_orders,
+    COUNT(CASE WHEN s.approval_status = 'pending'   THEN 1 END) AS pending_approval,
+    COUNT(CASE WHEN s.approval_status = 'rejected'  THEN 1 END) AS rejected_orders
+FROM employees e
+LEFT JOIN sales s ON s.representative_id = e.id
+WHERE e.is_representative = TRUE
+GROUP BY e.id, representative_name;
+
+
+-- Pending rep orders (accountant dashboard)
+CREATE OR REPLACE VIEW vw_pending_rep_orders AS
+SELECT
+    s.id              AS sale_id,
+    s.sale_number,
+    s.sale_date,
+    CONCAT(e.first_name, ' ', e.last_name) AS representative_name,
+    CONCAT(c.first_name, ' ', IFNULL(c.last_name, '')) AS customer_name,
+    s.total_amount,
+    s.order_type,
+    s.approval_status,
+    s.created_at
+FROM sales s
+LEFT JOIN employees e ON e.id = s.representative_id
+LEFT JOIN customers c ON c.id = s.customer_id
+WHERE s.order_type = 'representative'
+  AND s.approval_status = 'pending'
+ORDER BY s.created_at ASC;
+
+
+-- Monthly financials
+CREATE OR REPLACE VIEW vw_monthly_financials AS
+SELECT
+    yr, mn,
+    IFNULL(total_revenue, 0)  AS total_revenue,
+    IFNULL(total_expenses, 0) AS total_expenses,
+    IFNULL(total_revenue, 0) - IFNULL(total_expenses, 0) AS net_profit
+FROM (
+    SELECT YEAR(sale_date) AS yr, MONTH(sale_date) AS mn,
+           SUM(total_amount) AS total_revenue
+    FROM sales
+    WHERE order_status NOT IN ('cancelled', 'returned')
+      AND approval_status = 'approved'
+    GROUP BY yr, mn
+) rev
+LEFT JOIN (
+    SELECT YEAR(expense_date) AS yr, MONTH(expense_date) AS mn,
+           SUM(amount) AS total_expenses
+    FROM expenses
+    GROUP BY yr, mn
+) exp USING (yr, mn)
+ORDER BY yr DESC, mn DESC;
+
+
+-- Unread notifications
+CREATE OR REPLACE VIEW vw_unread_notifications AS
+SELECT
+    n.recipient_id,
+    u.username,
+    u.role,
+    COUNT(n.id)       AS unread_count,
+    MIN(n.created_at) AS oldest_unread
+FROM notifications n
+JOIN users u ON u.id = n.recipient_id
+WHERE n.is_read = FALSE
+GROUP BY n.recipient_id, u.username, u.role;
+
+
+
+-- TRIGGERS
+
+
+DELIMITER $$
+
+-- Auto-create inventory when product is added
+CREATE TRIGGER trg_product_after_insert
+AFTER INSERT ON products
+FOR EACH ROW
+BEGIN
+    INSERT INTO inventory (product_id, quantity_in_stock)
+    VALUES (NEW.id, 0);
+END$$
+
+
+-- Log user login
+CREATE TRIGGER trg_user_login_audit
+BEFORE UPDATE ON users
+FOR EACH ROW
+BEGIN
+    IF NEW.last_login <> OLD.last_login OR
+       (OLD.last_login IS NULL AND NEW.last_login IS NOT NULL) THEN
+        INSERT INTO audit_logs (user_id, user_name, action, table_name, record_id, description)
+        VALUES (NEW.id, NEW.username, 'LOGIN', 'users', NEW.id, 'User logged in');
+    END IF;
+END$$
+
+
+-- Track inventory changes
+CREATE TRIGGER trg_inventory_after_update
+AFTER UPDATE ON inventory
+FOR EACH ROW
+BEGIN
+    IF OLD.quantity_in_stock <> NEW.quantity_in_stock THEN
+        INSERT INTO audit_logs (
+            action, table_name, record_id,
+            old_values, new_values, description
+        ) VALUES (
+            'UPDATE', 'inventory', NEW.id,
+            JSON_OBJECT('quantity_in_stock', OLD.quantity_in_stock,
+                         'quantity_reserved', OLD.quantity_reserved),
+            JSON_OBJECT('quantity_in_stock', NEW.quantity_in_stock,
+                         'quantity_reserved', NEW.quantity_reserved),
+            CONCAT('Inventory changed for product_id=', NEW.product_id,
+                   ' from ', OLD.quantity_in_stock, ' to ', NEW.quantity_in_stock)
+        );
+    END IF;
+END$$
+
+
+-- Notify accountants when rep order is created
+CREATE TRIGGER trg_sale_after_insert
+AFTER INSERT ON sales
+FOR EACH ROW
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE accountant_id INT;
+    DECLARE rep_name VARCHAR(100);
+
+    IF NEW.order_type = 'representative' THEN
+
+        SELECT CONCAT(first_name, ' ', last_name)
+        INTO rep_name
+        FROM employees
+        WHERE id = NEW.representative_id
+        LIMIT 1;
+
+        BEGIN
+            DECLARE cur CURSOR FOR
+                SELECT id FROM users
+                WHERE role IN ('accountant', 'admin')
+                  AND is_active = TRUE;
+            DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+            OPEN cur;
+            read_loop: LOOP
+                FETCH cur INTO accountant_id;
+                IF done THEN LEAVE read_loop; END IF;
+
+                INSERT INTO notifications (
+                    recipient_id, sender_id,
+                    title, message, type,
+                    reference_table, reference_id
+                ) VALUES (
+                    accountant_id, NEW.created_by,
+                    CONCAT('New Order Awaiting Approval - ', NEW.sale_number),
+                    CONCAT('Representative ', IFNULL(rep_name, 'Unknown'),
+                           ' placed order ', NEW.sale_number,
+                           ' totaling ', NEW.total_amount,
+                           '. Please review and approve or reject.'),
+                    'order_approval', 'sales', NEW.id
+                );
+            END LOOP;
+            CLOSE cur;
+        END;
+
+        INSERT INTO audit_logs (
+            user_id, action, table_name, record_id, description
+        ) VALUES (
+            NEW.created_by, 'CREATE', 'sales', NEW.id,
+            CONCAT('Representative order ', NEW.sale_number, ' created - pending approval')
+        );
+    END IF;
+END$$
+
+
+-- Notify rep when order is approved/rejected
+CREATE TRIGGER trg_sale_approval_update
+AFTER UPDATE ON sales
+FOR EACH ROW
+BEGIN
+    DECLARE rep_user_id INT;
+    DECLARE notif_title VARCHAR(200);
+    DECLARE notif_message TEXT;
+    DECLARE notif_type VARCHAR(50);
+
+    IF OLD.approval_status <> NEW.approval_status
+       AND NEW.order_type = 'representative' THEN
+
+        SELECT u.id INTO rep_user_id
+        FROM users u
+        JOIN employees e ON e.email = u.email
+        WHERE e.id = NEW.representative_id
+        LIMIT 1;
+
+        IF NEW.approval_status = 'approved' THEN
+            SET notif_title   = CONCAT('Order ', NEW.sale_number, ' APPROVED');
+            SET notif_message = CONCAT('Your order ', NEW.sale_number,
+                                       ' has been approved and will be processed.');
+            SET notif_type    = 'order_approved';
+
+            INSERT INTO audit_logs (
+                user_id, action, table_name, record_id, description
+            ) VALUES (
+                NEW.approved_by, 'APPROVE', 'sales', NEW.id,
+                CONCAT('Order ', NEW.sale_number, ' approved')
+            );
+
+        ELSEIF NEW.approval_status = 'rejected' THEN
+            SET notif_title   = CONCAT('Order ', NEW.sale_number, ' REJECTED');
+            SET notif_message = CONCAT('Your order ', NEW.sale_number,
+                                       ' has been rejected. Reason: ',
+                                       IFNULL(NEW.rejection_reason, 'No reason provided'));
+            SET notif_type    = 'order_rejected';
+
+            INSERT INTO audit_logs (
+                user_id, action, table_name, record_id, description
+            ) VALUES (
+                NEW.approved_by, 'REJECT', 'sales', NEW.id,
+                CONCAT('Order ', NEW.sale_number, ' rejected. Reason: ',
+                       IFNULL(NEW.rejection_reason, 'N/A'))
+            );
+        END IF;
+
+        IF rep_user_id IS NOT NULL AND notif_title IS NOT NULL THEN
+            INSERT INTO notifications (
+                recipient_id, sender_id,
+                title, message, type,
+                reference_table, reference_id
+            ) VALUES (
+                rep_user_id, NEW.approved_by,
+                notif_title, notif_message, notif_type,
+                'sales', NEW.id
+            );
+        END IF;
+    END IF;
+END$$
+
+DELIMITER ;
+
+
+
+-- STORED PROCEDURES
+
+
+DELIMITER $$
+
+-- Approve order
+CREATE PROCEDURE sp_approve_order (
+    IN p_sale_id     INT,
+    IN p_approved_by INT
+)
+BEGIN
+    UPDATE sales
+    SET approval_status = 'approved',
+        approved_by     = p_approved_by,
+        approved_at     = NOW(),
+        order_status    = 'confirmed'
+    WHERE id = p_sale_id
+      AND approval_status = 'pending';
+END$$
+
+
+-- Reject order
+CREATE PROCEDURE sp_reject_order (
+    IN p_sale_id          INT,
+    IN p_approved_by      INT,
+    IN p_rejection_reason TEXT
+)
+BEGIN
+    UPDATE sales
+    SET approval_status  = 'rejected',
+        approved_by      = p_approved_by,
+        approved_at      = NOW(),
+        rejection_reason = p_rejection_reason,
+        order_status     = 'cancelled'
+    WHERE id = p_sale_id
+      AND approval_status = 'pending';
+END$$
+
+
+-- Record payment & update debt
+CREATE PROCEDURE sp_record_payment (
+    IN p_payment_number VARCHAR(30),
+    IN p_debt_id        INT,
+    IN p_amount         DECIMAL(14,2),
+    IN p_date           DATE,
+    IN p_notes          TEXT,
+    IN p_created_by     INT
+)
+BEGIN
+    START TRANSACTION;
+
+    INSERT INTO payments (
+        payment_number, debt_id, amount,
+        payment_date, notes, created_by
+    ) VALUES (
+        p_payment_number, p_debt_id, p_amount,
+        p_date, p_notes, p_created_by
+    );
+
+    IF p_debt_id IS NOT NULL THEN
+        UPDATE debts
+        SET paid_amount       = paid_amount + p_amount,
+            last_payment_date = p_date,
+            status = CASE
+                WHEN (paid_amount + p_amount) >= original_amount THEN 'paid'
+                ELSE 'partially_paid'
+            END
+        WHERE id = p_debt_id;
+    END IF;
+
+    COMMIT;
+END$$
+
+
+-- Daily sales report
+CREATE PROCEDURE sp_daily_sales_report (IN p_date DATE)
+BEGIN
+    SELECT
+        s.sale_number,
+        CONCAT(c.first_name, ' ', IFNULL(c.last_name, '')) AS customer,
+        CONCAT(e.first_name, ' ', e.last_name)             AS representative,
+        s.order_type,
+        s.approval_status,
+        s.total_amount,
+        s.paid_amount,
+        s.due_amount,
+        s.payment_status,
+        s.order_status
+    FROM sales s
+    LEFT JOIN customers c ON c.id = s.customer_id
+    LEFT JOIN employees e ON e.id = s.representative_id
+    WHERE s.sale_date = p_date
+    ORDER BY s.created_at;
+
+    SELECT
+        COUNT(*)             AS total_transactions,
+        SUM(total_amount)    AS gross_sales,
+        SUM(discount_amount) AS total_discounts,
+        SUM(paid_amount)     AS total_collected,
+        SUM(due_amount)      AS total_credit
+    FROM sales
+    WHERE sale_date = p_date
+      AND order_status NOT IN ('cancelled', 'returned')
+      AND approval_status = 'approved';
+END$$
+
+
+-- Mark single notification read
+CREATE PROCEDURE sp_mark_notification_read (
+    IN p_notification_id INT,
+    IN p_user_id         INT
+)
+BEGIN
+    UPDATE notifications
+    SET is_read = TRUE, read_at = NOW()
+    WHERE id = p_notification_id
+      AND recipient_id = p_user_id;
+END$$
+
+
+-- Mark all notifications read
+CREATE PROCEDURE sp_mark_all_notifications_read (
+    IN p_user_id INT
+)
+BEGIN
+    UPDATE notifications
+    SET is_read = TRUE, read_at = NOW()
+    WHERE recipient_id = p_user_id
+      AND is_read = FALSE;
+END$$
+
+DELIMITER ;
+
+-- PROBLEM: debts table has no reference to WHO owes the debt
+
+-- FIX:
+ALTER TABLE debts
+ADD COLUMN customer_id INT NULL AFTER debt_number,
+ADD COLUMN sale_id     INT NULL AFTER customer_id,
+ADD CONSTRAINT fk_debt_customer
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+ADD CONSTRAINT fk_debt_sale
+    FOREIGN KEY (sale_id) REFERENCES sales(id)
+    ON UPDATE CASCADE ON DELETE SET NULL;
+    
+    -- PROBLEM: No trigger updates inventory when purchase_items 
+--          or sale_items are inserted
+
+-- FIX: Add triggers
+DELIMITER $$
+
+CREATE TRIGGER trg_purchase_item_after_insert
+AFTER INSERT ON purchase_items
+FOR EACH ROW
+BEGIN
+    UPDATE inventory
+    SET quantity_in_stock = quantity_in_stock + NEW.quantity,
+        last_restock_date = CURDATE()
+    WHERE product_id = NEW.product_id;
+
+    INSERT INTO inventory_transactions
+        (product_id, transaction_type, quantity, notes, created_at)
+    VALUES
+        (NEW.product_id, 'purchase', NEW.quantity,
+         CONCAT('Purchase ID: ', NEW.purchase_id), NOW());
+END$$
+
+CREATE TRIGGER trg_sale_item_after_insert
+AFTER INSERT ON sale_items
+FOR EACH ROW
+BEGIN
+    DECLARE the_sale_approved VARCHAR(20);
+    
+    SELECT approval_status INTO the_sale_approved
+    FROM sales WHERE id = NEW.sale_id;
+    
+    -- Only deduct if sale is approved
+    IF the_sale_approved = 'approved' THEN
+        UPDATE inventory
+        SET quantity_in_stock = quantity_in_stock - NEW.quantity,
+            last_sold_date = CURDATE()
+        WHERE product_id = NEW.product_id;
+
+        INSERT INTO inventory_transactions
+            (product_id, transaction_type, quantity, notes)
+        VALUES
+            (NEW.product_id, 'sale', -NEW.quantity,
+             CONCAT('Sale ID: ', NEW.sale_id));
+    END IF;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_low_stock_alert
+AFTER UPDATE ON inventory
+FOR EACH ROW
+BEGIN
+    DECLARE prod_name VARCHAR(200);
+    DECLARE reorder   INT;
+
+    IF NEW.quantity_in_stock < OLD.quantity_in_stock THEN
+        SELECT p.name, p.reorder_level
+        INTO prod_name, reorder
+        FROM products p WHERE p.id = NEW.product_id;
+
+        IF NEW.quantity_in_stock <= reorder THEN
+            INSERT INTO notifications (
+                recipient_id, title, message, type,
+                reference_table, reference_id
+            )
+            SELECT
+                u.id,
+                CONCAT('⚠ Low Stock: ', prod_name),
+                CONCAT(prod_name, ' has only ',
+                       NEW.quantity_in_stock, ' units left.',
+                       ' Reorder level: ', reorder),
+                'low_stock', 'products', NEW.product_id
+            FROM users u
+            WHERE u.role IN ('admin', 'accountant')
+              AND u.is_active = TRUE;
+        END IF;
+    END IF;
+END$$
+
+DELIMITER ;
+INSERT INTO users (username,email,password_hash,role,is_active)
+VALUES (
+'admin',
+'admin@mail.com',
+SHA2('123456',256),
+'admin',
+1
+);
